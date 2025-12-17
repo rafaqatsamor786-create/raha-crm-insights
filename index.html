@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RAFA CRM — Insights</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+body{
+  margin:0;
+  font-family:'Inter',sans-serif;
+  background:linear-gradient(135deg,#f7d774,#d4a017,#b89100);
+  min-height:100vh;
+  padding:25px;
+}
+
+.header{
+  background:black;
+  color:#f7d774;
+  padding:18px 24px;
+  border-radius:16px;
+  font-size:22px;
+  font-weight:800;
+  margin-bottom:25px;
+}
+
+/* KPI grid */
+.kpis{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:20px;
+}
+
+.card{
+  background:#fff9e6;
+  border-radius:16px;
+  padding:20px;
+  border:1px solid #caa200;
+  box-shadow:0 15px 30px rgba(0,0,0,0.25);
+}
+
+.card h3{
+  font-size:14px;
+  color:#333;
+  margin:0;
+}
+
+.card .value{
+  font-size:26px;
+  font-weight:800;
+  margin-top:8px;
+  color:#000;
+}
+
+/* Charts */
+.charts{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:25px;
+  margin-top:30px;
+}
+
+.chart-title{
+  font-weight:700;
+  margin-bottom:10px;
+  color:#000;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">RAFA CRM — Insights Dashboard</div>
+
+<!-- KPI CARDS -->
+<div class="kpis">
+  <div class="card">
+    <h3>Total Leads</h3>
+    <div class="value" id="totalLeads">0</div>
+  </div>
+  <div class="card">
+    <h3>Pipeline Value (€)</h3>
+    <div class="value" id="pipelineValue">0</div>
+  </div>
+  <div class="card">
+    <h3>Won Deals</h3>
+    <div class="value" id="wonDeals">0</div>
+  </div>
+  <div class="card">
+    <h3>Active Leads</h3>
+    <div class="value" id="activeLeads">0</div>
+  </div>
+</div>
+
+<!-- CHARTS -->
+<div class="charts">
+
+  <div class="card">
+    <div class="chart-title">Leads by Stage</div>
+    <canvas id="stageChart" width="300" height="300"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="chart-title">Leads by Source</div>
+    <canvas id="sourceChart" width="300" height="300"></canvas>
+  </div>
+
+</div>
+
+<script>
+/* 🔥 FIREBASE CONFIG — SAME AS OTHER FILES */
+const firebaseConfig = {
+  apiKey: "AIzaSyDwdA6yxV_dOq5FJQ2lQvQ0_y2jcu1bYl8",
+  authDomain: "rafa-crm-2f118.firebaseapp.com",
+  projectId: "rafa-crm-2f118",
+  storageBucket: "rafa-crm-2f118.firebasestorage.app",
+  messagingSenderId: "769523596904",
+  appId: "1:769523596904:web:490decd7bc60153099c5dd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* PIE DRAW FUNCTION */
+function drawPie(canvasId, labels, data, colors){
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const total = Object.values(data).reduce((a,b)=>a+b,0);
+  let start = 0;
+
+  labels.forEach((label,i)=>{
+    const value = data[label];
+    if(value === 0) return;
+    const angle = (value/total)*2*Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(150,150);
+    ctx.arc(150,150,120,start,start+angle);
+    ctx.closePath();
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+    start += angle;
+  });
+}
+
+/* REAL-TIME LISTENER */
+db.collection("leads").onSnapshot(snapshot=>{
+  let totalLeads = 0;
+  let pipelineValue = 0;
+  let wonDeals = 0;
+  let activeLeads = 0;
+
+  const stageCounts = {
+    Open:0, Contacted:0, Qualified:0, Proposal:0, Won:0, Lost:0
+  };
+
+  const sourceCounts = {
+    Website:0, Referral:0, "Online Ads":0, "Walk-in":0
+  };
+
+  snapshot.forEach(doc=>{
+    const l = doc.data();
+    totalLeads++;
+
+    if(l.stage !== "Lost") pipelineValue += l.value;
+    if(l.stage === "Won") wonDeals++;
+    if(l.stage !== "Won" && l.stage !== "Lost") activeLeads++;
+
+    stageCounts[l.stage]++;
+    if(l.source && sourceCounts[l.source] !== undefined){
+      sourceCounts[l.source]++;
+    }
+  });
+
+  document.getElementById("totalLeads").innerText = totalLeads;
+  document.getElementById("pipelineValue").innerText = pipelineValue.toFixed(2);
+  document.getElementById("wonDeals").innerText = wonDeals;
+  document.getElementById("activeLeads").innerText = activeLeads;
+
+  drawPie(
+    "stageChart",
+    ["Open","Contacted","Qualified","Proposal","Won","Lost"],
+    stageCounts,
+    ["#000","#444","#777","#aaa","#1a7f37","#b91c1c"]
+  );
+
+  drawPie(
+    "sourceChart",
+    ["Website","Referral","Online Ads","Walk-in"],
+    sourceCounts,
+    ["#000","#555","#888","#bbb"]
+  );
+});
+</script>
+
+</body>
+</html>
